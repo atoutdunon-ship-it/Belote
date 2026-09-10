@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      TBR_SECRET_KEY: ${TBR_SECRET_KEY:?definir une cle secrete longue dans .env}
+      TBR_DATABASE_URL: sqlite:////app/data/tbr.db
+      TBR_ADMIN_NUMERO: ${TBR_ADMIN_NUMERO:-1}
+      TBR_ADMIN_NOM: ${TBR_ADMIN_NOM:-Administrateur}
+      TBR_ADMIN_PIN: ${TBR_ADMIN_PIN:-1234}
+    volumes:
+      - tbr-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  tbr-data:

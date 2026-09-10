@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from ..engine import RuleError, TournamentFormat
+from ..config import get_settings
 from ..models import (
     GameTable,
     Player,
@@ -16,6 +17,7 @@ from ..models import (
     TournamentStatus,
 )
 from ..schemas import (
+    AdminPasswordChangeIn,
     DealIn,
     LoginIn,
     PinChangeIn,
@@ -25,7 +27,15 @@ from ..schemas import (
     TokenOut,
     TournamentIn,
 )
-from ..security import AuthError, create_token, hash_pin, validate_pin, verify_pin
+from ..security import (
+    AuthError,
+    create_token,
+    hash_password,
+    hash_pin,
+    validate_pin,
+    verify_password,
+    verify_pin,
+)
 from .. import services as svc
 from .deps import AdminDep, PlayerDep, SessionDep, TournamentDep
 from .ws import hub
@@ -46,11 +56,29 @@ auth = APIRouter(prefix="/auth", tags=["auth"])
 
 @auth.post("/login", response_model=TokenOut)
 def login(payload: LoginIn, session: SessionDep) -> TokenOut:
-    player = session.execute(
-        select(Player).where(Player.numero == payload.numero)
-    ).scalar_one_or_none()
-    if player is None or not player.actif or not verify_pin(payload.pin, player.pin_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Numero de joueur ou code PIN incorrect.")
+    if payload.identifiant is not None:
+        settings = get_settings()
+        player = session.execute(
+            select(Player).where(Player.is_admin.is_(True), Player.nom == settings.admin_nom)
+        ).scalar_one_or_none()
+        authenticated = (
+            payload.identifiant.casefold() == settings.admin_identifiant.casefold()
+            and player is not None
+            and player.actif
+            and verify_password(payload.mot_de_passe or "", player.password_hash or "")
+        )
+    else:
+        player = session.execute(
+            select(Player).where(Player.numero == payload.numero)
+        ).scalar_one_or_none()
+        authenticated = (
+            player is not None
+            and not player.is_admin
+            and player.actif
+            and verify_pin(payload.pin or "", player.pin_hash)
+        )
+    if not authenticated or player is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Identifiants de connexion incorrects.")
     return TokenOut(
         access_token=create_token(player.id, player.numero, player.is_admin),
         player_id=player.id,
@@ -67,10 +95,28 @@ def me(player: PlayerDep) -> Player:
 
 @auth.post("/pin", status_code=status.HTTP_204_NO_CONTENT)
 def change_pin(payload: PinChangeIn, player: PlayerDep) -> Response:
+    if player.is_admin:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Utilisez la modification du mot de passe administrateur.",
+        )
     if not verify_pin(payload.ancien_pin, player.pin_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Code PIN actuel incorrect.")
     try:
         player.pin_hash = hash_pin(payload.nouveau_pin)
+    except AuthError as exc:
+        raise _boom(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@auth.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_admin_password(payload: AdminPasswordChangeIn, player: PlayerDep) -> Response:
+    if not player.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Reserve a l'administrateur.")
+    if not verify_password(payload.ancien_mot_de_passe, player.password_hash or ""):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Mot de passe actuel incorrect.")
+    try:
+        player.password_hash = hash_password(payload.nouveau_mot_de_passe)
     except AuthError as exc:
         raise _boom(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -141,8 +187,32 @@ tournaments = APIRouter(prefix="/tournaments", tags=["tournois"])
 def list_tournaments(session: SessionDep, player: PlayerDep) -> list[dict[str, Any]]:
     stmt = select(Tournament).order_by(Tournament.id.desc())
     if not player.is_admin:
-        stmt = stmt.join(Registration).where(Registration.player_id == player.id)
-    return [svc.tournament_summary(session, t) for t in session.execute(stmt).scalars()]
+        # Les joueurs connectes voient les inscriptions encore ouvertes pour
+        # pouvoir rejoindre un tournoi, ainsi que leurs propres tournois.
+        stmt = (
+            stmt.outerjoin(
+                Registration,
+                (Registration.tournament_id == Tournament.id)
+                & (Registration.player_id == player.id),
+            )
+            .where(
+                or_(
+                    Tournament.statut == TournamentStatus.BROUILLON,
+                    Registration.player_id == player.id,
+                )
+            )
+        )
+    rows = list(session.execute(stmt).scalars())
+    registered = {
+        registration.tournament_id
+        for registration in session.execute(
+            select(Registration).where(Registration.player_id == player.id)
+        ).scalars()
+    }
+    return [
+        {**svc.tournament_summary(session, tournament), "est_inscrit": tournament.id in registered}
+        for tournament in rows
+    ]
 
 
 @tournaments.post("", status_code=status.HTTP_201_CREATED)
@@ -227,6 +297,25 @@ def add_registration(
         "nom": player.nom,
         "dossard": reg.dossard,
         "team_numero": reg.team.numero if reg.team else None,
+    }
+
+
+@tournaments.post("/{tournament_id}/join", status_code=status.HTTP_201_CREATED)
+def join_tournament(
+    tournament: TournamentDep, session: SessionDep, player: PlayerDep
+) -> dict[str, Any]:
+    """Inscrit le joueur connecte a un tournoi dont les inscriptions sont ouvertes."""
+    try:
+        registration = svc.register(session, tournament, player)
+    except svc.ServiceError as exc:
+        raise _boom(exc) from exc
+    return {
+        "id": registration.id,
+        "player_id": player.id,
+        "numero": player.numero,
+        "nom": player.nom,
+        "dossard": registration.dossard,
+        "team_numero": registration.team.numero if registration.team else None,
     }
 
 

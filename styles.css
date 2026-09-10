@@ -220,6 +220,8 @@ tr.moi td { background: var(--navy-700); font-weight: 650; }
 .camp .score { font-size: 1.4rem; font-weight: 700; color: var(--blanc); font-variant-numeric: tabular-nums; }
 
 .connexion { max-width: 420px; margin: 8vh auto; }
+.connexion .separateur { border: 0; border-top: 1px solid var(--bordure); margin: 22px 0; }
+.connexion h2 { margin: 0; font-size: 1rem; }
 
 .pied { color: var(--texte-2); font-size: 0.8rem; padding: 20px var(--gouttiere) 40px; text-align: center; }
 

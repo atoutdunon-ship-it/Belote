@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     token_ttl_minutes: int = 60 * 12
     #: Compte administrateur cree au premier demarrage si la base est vide.
     admin_numero: int = 1
-    admin_nom: str = "Administrateur"
-    admin_pin: str = "1234"
+    admin_nom: str = "Admin"
+    admin_identifiant: str = "Admin"
+    admin_password: str = "Music7"
     cors_origins: list[str] = ["*"]
 
 

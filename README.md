@@ -89,8 +89,14 @@ uvicorn tbr.main:app --reload --host 0.0.0.0 --port 8000
 Interface : <http://localhost:8000> — API documentée : <http://localhost:8000/docs>
 
 Au premier démarrage, un compte administrateur est créé à partir de
-`TBR_ADMIN_NUMERO` / `TBR_ADMIN_PIN` (par défaut **numéro 1, PIN 1234** — à
-changer immédiatement depuis l'onglet « Mon code »).
+`TBR_ADMIN_IDENTIFIANT` / `TBR_ADMIN_PASSWORD` (par défaut **Admin / Music7**).
+Les participants se connectent séparément avec leur **numéro de joueur** et le
+**code PIN à quatre chiffres** attribué par l'organisateur. Un joueur connecté
+voit les tournois dont les inscriptions sont ouvertes et peut s'y inscrire lui-même.
+Le compte administrateur ne peut pas être utilisé avec le formulaire joueur :
+il est réservé au formulaire organisateur. Son mot de passe se modifie depuis
+l'onglet « Mon code » ; les joueurs y changent uniquement leur PIN. Les mots de
+passe administrateur et PIN joueur sont stockés dans deux champs distincts.
 
 ### Jeu de démonstration
 
@@ -159,7 +165,8 @@ secrète n'est poussée**.
    sys.path.insert(0, CHEMIN)
    os.environ["TBR_SECRET_KEY"] = "<la clé générée à l'étape 1>"
    os.environ["TBR_DATABASE_URL"] = f"sqlite:///{CHEMIN}/data/tbr.db"
-   os.environ["TBR_ADMIN_PIN"] = "<votre PIN admin initial>"
+   os.environ["TBR_ADMIN_IDENTIFIANT"] = "Admin"
+   os.environ["TBR_ADMIN_PASSWORD"] = "<mot-de-passe-admin-initial>"
    from wsgi import application   # noqa: F401
    ```
 

@@ -44,6 +44,8 @@ class Player(Base):
     numero: Mapped[int] = mapped_column(Integer, unique=True, index=True)
     nom: Mapped[str] = mapped_column(String(80))
     pin_hash: Mapped[str] = mapped_column(String(255))
+    #: Reserve au mot de passe du profil administrateur nomme.
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

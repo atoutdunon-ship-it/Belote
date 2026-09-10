@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import get_settings
@@ -27,6 +27,12 @@ if _settings.database_url.startswith("sqlite"):
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    # Migration legere pour les bases creees avant l'ajout du mot de passe
+    # administrateur separe du PIN joueur.
+    columns = {column["name"] for column in inspect(engine).get_columns("players")}
+    if "password_hash" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE players ADD COLUMN password_hash VARCHAR(255)"))
 
 
 def get_session() -> Iterator[Session]:

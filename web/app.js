@@ -79,15 +79,15 @@ function signaler(texte, type = 'erreur') {
 
 /* ------------------------------------------------------- Authentification */
 
-async function connexion(numero, pin) {
+async function connexion(payload) {
   const data = await api('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ numero: Number(numero), pin: String(pin) }),
+    body: JSON.stringify(payload),
   });
   S.token = data.access_token;
   stock.ecrire('tbr_token', S.token);
   S.moi = data;
-  S.vue = data.is_admin ? 'tournois' : 'ma-table';
+  S.vue = data.is_admin ? 'tournois' : 'rejoindre';
   await charger();
 }
 
@@ -107,7 +107,7 @@ async function charger() {
     if (!S.moi) {
       const moi = await api('/auth/me');
       S.moi = { player_id: moi.id, numero: moi.numero, nom: moi.nom, is_admin: moi.is_admin };
-      if (S.vue === 'connexion') S.vue = moi.is_admin ? 'tournois' : 'ma-table';
+      if (S.vue === 'connexion') S.vue = moi.is_admin ? 'tournois' : 'rejoindre';
     }
     S.tournois = await api('/tournaments');
     if (!S.tournoiId && S.tournois.length) S.tournoiId = S.tournois[0].id;
@@ -196,6 +196,7 @@ const ONGLETS_ADMIN = [
   ['compte', 'Mon code'],
 ];
 const ONGLETS_JOUEUR = [
+  ['rejoindre', 'Rejoindre un tournoi'],
   ['ma-table', 'Ma table'],
   ['mes-resultats', 'Mes résultats'],
   ['suivi', 'Suivi du tournoi'],
@@ -262,6 +263,7 @@ function vueCourante() {
     case 'manche': return vueManche();
     case 'classement': return vueClassement();
     case 'joueurs': return vueJoueurs();
+    case 'rejoindre': return vueRejoindre();
     case 'ma-table': return vueMaTable();
     case 'mes-resultats': return vueMesResultats();
     case 'suivi': return vueSuivi();
@@ -275,15 +277,43 @@ function vueConnexion() {
   return `
   <section class="carte connexion">
     <h1>Connexion</h1>
-    <p>Entrez le numéro de joueur remis à l'inscription et votre code à 4 chiffres.</p>
+    <p>Les joueurs utilisent leur numéro et leur code PIN. L'organisateur utilise son identifiant et son mot de passe.</p>
     ${configurationManquante ? '<div class="message info">L’interface GitHub Pages est prête, mais le serveur de scores n’est pas encore configuré. Ajoutez son adresse PythonAnywhere dans <code>runtime-config.js</code> pour activer la connexion.</div>' : ''}
     <form id="form-connexion" class="grille">
+      <h2>Espace joueur</h2>
       <div><label for="numero">Numéro de joueur</label>
         <input id="numero" name="numero" type="number" inputmode="numeric" required autocomplete="username"></div>
-      <div><label for="pin">Code PIN</label>
+      <div><label for="pin">Code PIN à 4 chiffres</label>
         <input id="pin" name="pin" type="password" inputmode="numeric" maxlength="4" required autocomplete="current-password"></div>
-      <button class="action" type="submit">Se connecter</button>
+      <button class="action" type="submit">Se connecter comme joueur</button>
     </form>
+    <hr class="separateur">
+    <form id="form-connexion-admin" class="grille">
+      <h2>Espace organisateur</h2>
+      <div><label for="identifiant-admin">Identifiant</label>
+        <input id="identifiant-admin" name="identifiant" type="text" required autocomplete="username"></div>
+      <div><label for="mot-de-passe-admin">Mot de passe</label>
+        <input id="mot-de-passe-admin" name="mot_de_passe" type="password" required autocomplete="current-password"></div>
+      <button class="action discret" type="submit">Se connecter comme organisateur</button>
+    </form>
+  </section>`;
+}
+
+function vueRejoindre() {
+  const t = S.tournoi;
+  if (!t) return '<section class="carte"><h1>Rejoindre un tournoi</h1><p>Aucun tournoi n’est actuellement ouvert aux inscriptions.</p></section>';
+  const ouvert = t.statut === 'BROUILLON';
+  const inscrit = Boolean(t.est_inscrit);
+  return selecteurTournoi() + `
+  <section class="carte connexion">
+    <h1>Rejoindre un tournoi</h1>
+    <h2>${esc(t.nom)}</h2>
+    <p>${t.inscrits} inscrit(s) sur ${t.nb_joueurs} places. ${t.game_type === 'COINCHE' ? 'Belote coinchée.' : 'Belote classique.'}</p>
+    ${inscrit
+      ? '<div class="message succes">Vous êtes inscrit à ce tournoi. Votre table sera affichée lorsque l’organisateur lancera la première manche.</div>'
+      : ouvert
+        ? '<button class="action" id="btn-rejoindre">Rejoindre ce tournoi</button>'
+        : '<div class="message info">Les inscriptions à ce tournoi sont closes.</div>'}
   </section>`;
 }
 
@@ -671,6 +701,17 @@ function vueMesResultats() {
 }
 
 function vueCompte() {
+  if (S.moi && S.moi.is_admin) {
+    return `
+    <section class="carte connexion">
+      <h1>Changer le mot de passe administrateur</h1>
+      <form id="form-password-admin" class="grille">
+        <div><label for="a-ancien">Mot de passe actuel</label><input id="a-ancien" type="password" required autocomplete="current-password"></div>
+        <div><label for="a-nouveau">Nouveau mot de passe (6 caractères minimum)</label><input id="a-nouveau" type="password" required autocomplete="new-password"></div>
+        <button class="action" type="submit">Enregistrer</button>
+      </form>
+    </section>`;
+  }
   return `
   <section class="carte connexion">
     <h1>Changer mon code PIN</h1>
@@ -700,8 +741,19 @@ function brancher() {
   const fc = $('#form-connexion');
   if (fc) fc.addEventListener('submit', async (e) => {
     e.preventDefault();
-    try { await connexion($('#numero').value, $('#pin').value); }
+    try { await connexion({ numero: Number($('#numero').value), pin: String($('#pin').value) }); }
     catch (err) { signaler(err.message); }
+  });
+
+  const fca = $('#form-connexion-admin');
+  if (fca) fca.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await connexion({
+        identifiant: $('#identifiant-admin').value.trim(),
+        mot_de_passe: $('#mot-de-passe-admin').value,
+      });
+    } catch (err) { signaler(err.message); }
   });
 
   const ft = $('#form-tournoi');
@@ -724,6 +776,15 @@ function brancher() {
       S.tournoiId = cree.id;
       S.vue = 'inscriptions';
       await charger();
+    } catch (err) { signaler(err.message); }
+  });
+
+  const br = $('#btn-rejoindre');
+  if (br) br.addEventListener('click', async () => {
+    try {
+      await api(`/tournaments/${S.tournoiId}/join`, { method: 'POST' });
+      await charger();
+      signaler('Inscription enregistrée. Votre dossard a été attribué.', 'succes');
     } catch (err) { signaler(err.message); }
   });
 
@@ -828,6 +889,21 @@ function brancher() {
         body: JSON.stringify({ ancien_pin: $('#p-ancien').value, nouveau_pin: $('#p-nouveau').value }),
       });
       signaler('Code PIN mis à jour.', 'succes');
+    } catch (err) { signaler(err.message); }
+  });
+
+  const fpa = $('#form-password-admin');
+  if (fpa) fpa.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('/auth/password', {
+        method: 'POST',
+        body: JSON.stringify({
+          ancien_mot_de_passe: $('#a-ancien').value,
+          nouveau_mot_de_passe: $('#a-nouveau').value,
+        }),
+      });
+      signaler('Mot de passe administrateur mis à jour.', 'succes');
     } catch (err) { signaler(err.message); }
   });
 }

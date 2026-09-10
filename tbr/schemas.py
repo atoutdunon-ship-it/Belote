@@ -2,14 +2,31 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .engine import GameType, PairingMethod, TournamentFormat
 
 
 class LoginIn(BaseModel):
-    numero: int
-    pin: str
+    """Connexion soit par identifiant administrateur, soit par numero joueur."""
+
+    numero: int | None = None
+    pin: str | None = None
+    identifiant: str | None = None
+    mot_de_passe: str | None = None
+
+    @model_validator(mode="after")
+    def _login_method_is_complete(self) -> "LoginIn":
+        player_login = self.numero is not None or self.pin is not None
+        admin_login = self.identifiant is not None or self.mot_de_passe is not None
+        if player_login and admin_login:
+            raise ValueError("Choisissez la connexion administrateur ou joueur, pas les deux.")
+        if admin_login:
+            if not (self.identifiant and self.mot_de_passe):
+                raise ValueError("Identifiant et mot de passe administrateur requis.")
+        elif self.numero is None or self.pin is None:
+            raise ValueError("Numero de joueur et code PIN requis.")
+        return self
 
 
 class TokenOut(BaseModel):
@@ -24,6 +41,11 @@ class TokenOut(BaseModel):
 class PinChangeIn(BaseModel):
     ancien_pin: str
     nouveau_pin: str
+
+
+class AdminPasswordChangeIn(BaseModel):
+    ancien_mot_de_passe: str
+    nouveau_mot_de_passe: str
 
 
 class PlayerIn(BaseModel):

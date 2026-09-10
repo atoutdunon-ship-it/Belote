@@ -27,6 +27,8 @@ BASE = Path(__file__).resolve().parent
 # Ces variables peuvent aussi etre placees dans un fichier .env a la racine.
 os.environ.setdefault("TBR_DATABASE_URL", f"sqlite:///{BASE / 'data' / 'tbr.db'}")
 os.environ.setdefault("TBR_SECRET_KEY", "")  # a definir imperativement en production
+os.environ.setdefault("TBR_ADMIN_IDENTIFIANT", "Admin")
+os.environ.setdefault("TBR_ADMIN_PASSWORD", "Music7")
 
 if not os.environ.get("TBR_SECRET_KEY"):
     raise RuntimeError(

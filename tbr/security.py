@@ -30,11 +30,25 @@ def hash_pin(pin: str) -> str:
     return _hasher.hash(validate_pin(pin))
 
 
+def validate_password(password: str) -> str:
+    if len(password or "") < 6:
+        raise AuthError("Le mot de passe doit comporter au moins 6 caracteres.")
+    return password
+
+
+def hash_password(password: str) -> str:
+    return _hasher.hash(validate_password(password))
+
+
 def verify_pin(pin: str, pin_hash: str) -> bool:
     try:
         return _hasher.verify(pin_hash, pin or "")
     except (VerifyMismatchError, VerificationError):
         return False
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    return verify_pin(password, password_hash)
 
 
 def needs_rehash(pin_hash: str) -> bool:

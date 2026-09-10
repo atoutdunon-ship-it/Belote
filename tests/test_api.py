@@ -20,9 +20,19 @@ def auth(client, numero: int, pin: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
+def auth_admin(client) -> dict[str, str]:
+    r = client.post(
+        "/api/auth/login", json={"identifiant": "Admin", "mot_de_passe": "Music7"}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["nom"] == "Admin"
+    assert r.json()["is_admin"] is True
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
 @pytest.fixture(scope="module")
 def admin(client):
-    return auth(client, 1, "1234")
+    return auth_admin(client)
 
 
 @pytest.fixture(scope="module")
@@ -61,7 +71,60 @@ def test_effectif_non_multiple_de_quatre_refuse(client, admin):
 
 
 def test_login_invalide(client):
-    assert client.post("/api/auth/login", json={"numero": 1, "pin": "0000"}).status_code == 401
+    assert client.post(
+        "/api/auth/login", json={"identifiant": "Admin", "mot_de_passe": "incorrect"}
+    ).status_code == 401
+    assert client.post("/api/auth/login", json={"numero": 1, "pin": "Music7"}).status_code == 401
+
+
+def test_administrateur_peut_changer_son_mot_de_passe(client, admin):
+    changed = client.post(
+        "/api/auth/password",
+        headers=admin,
+        json={"ancien_mot_de_passe": "Music7", "nouveau_mot_de_passe": "Nouveau8"},
+    )
+    assert changed.status_code == 204, changed.text
+    assert client.post(
+        "/api/auth/login", json={"identifiant": "Admin", "mot_de_passe": "Nouveau8"}
+    ).status_code == 200
+    restored = client.post(
+        "/api/auth/password",
+        headers=admin,
+        json={"ancien_mot_de_passe": "Nouveau8", "nouveau_mot_de_passe": "Music7"},
+    )
+    assert restored.status_code == 204, restored.text
+
+
+def test_joueur_connecte_peut_rejoindre_un_tournoi_ouvert(client, admin):
+    tournament = client.post(
+        "/api/tournaments",
+        headers=admin,
+        json={"nom": "Inscriptions ouvertes", "nb_joueurs": 4, "nb_manches": 1},
+    )
+    assert tournament.status_code == 201, tournament.text
+    tournament_id = tournament.json()["id"]
+
+    player = client.post(
+        "/api/players",
+        headers=admin,
+        json={"numero": 9000, "nom": "Joueur autonome", "pin": "4321"},
+    )
+    assert player.status_code == 201, player.text
+
+    player_headers = auth(client, 9000, "4321")
+    visible = client.get("/api/tournaments", headers=player_headers)
+    assert visible.status_code == 200
+    row = next(item for item in visible.json() if item["id"] == tournament_id)
+    assert row["est_inscrit"] is False
+
+    joined = client.post(f"/api/tournaments/{tournament_id}/join", headers=player_headers)
+    assert joined.status_code == 201, joined.text
+    assert joined.json()["dossard"] == 1
+
+    visible_after = client.get("/api/tournaments", headers=player_headers)
+    row_after = next(item for item in visible_after.json() if item["id"] == tournament_id)
+    assert row_after["est_inscrit"] is True
+    assert client.post(f"/api/tournaments/{tournament_id}/join", headers=player_headers).status_code == 400
 
 
 def test_parcours_complet(client, admin, tournoi):

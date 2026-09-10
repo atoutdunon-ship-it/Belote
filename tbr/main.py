@@ -15,7 +15,7 @@ from .api import api, hub
 from .config import get_settings
 from .db import SessionLocal, init_db
 from .models import Player
-from .security import hash_pin
+from .security import hash_password, hash_pin
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -23,14 +23,42 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 def bootstrap_admin() -> None:
     settings = get_settings()
     with SessionLocal() as session:
-        exists = session.execute(select(Player).limit(1)).scalar_one_or_none()
-        if exists is not None:
+        admin = session.execute(
+            select(Player).where(Player.is_admin.is_(True), Player.nom == settings.admin_nom)
+        ).scalar_one_or_none()
+        if admin is not None:
+            if not admin.password_hash:
+                admin.password_hash = hash_password(settings.admin_password)
+                session.commit()
             return
+
+        # Migration unique de l'ancien compte par defaut de l'application.
+        # Un administrateur explicitement cree par un club n'est jamais modifie.
+        legacy = session.execute(
+            select(Player).where(
+                Player.is_admin.is_(True),
+                Player.numero == settings.admin_numero,
+                Player.nom == "Administrateur",
+            )
+        ).scalar_one_or_none()
+        if legacy is not None:
+            legacy.nom = settings.admin_nom
+            legacy.password_hash = hash_password(settings.admin_password)
+            session.commit()
+            return
+
+        numero_taken = session.execute(
+            select(Player).where(Player.numero == settings.admin_numero)
+        ).scalar_one_or_none()
+        numero = settings.admin_numero if numero_taken is None else (
+            session.execute(select(Player.numero).order_by(Player.numero.desc())).scalars().first() or 0
+        ) + 1
         session.add(
             Player(
-                numero=settings.admin_numero,
+                numero=numero,
                 nom=settings.admin_nom,
-                pin_hash=hash_pin(settings.admin_pin),
+                pin_hash=hash_pin("0000"),
+                password_hash=hash_password(settings.admin_password),
                 is_admin=True,
             )
         )

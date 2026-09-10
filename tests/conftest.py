@@ -8,4 +8,5 @@ os.environ.setdefault("TBR_DATABASE_URL", f"sqlite:///{_TMP / 'test.db'}")
 os.environ.setdefault(
     "TBR_SECRET_KEY", "cle-de-test-uniquement-suffisamment-longue-pour-hmac-sha256"
 )
-os.environ.setdefault("TBR_ADMIN_PIN", "1234")
+os.environ.setdefault("TBR_ADMIN_IDENTIFIANT", "Admin")
+os.environ.setdefault("TBR_ADMIN_PASSWORD", "Music7")

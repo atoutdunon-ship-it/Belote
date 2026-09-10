@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05070d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Belote &amp; Re">
+  <title>Team Belote &amp; Re</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="barre">
+    <button class="bouton-menu" id="btn-menu" aria-expanded="false" aria-controls="tiroir">Menu</button>
+    <div>
+      <div class="barre-titre">Team Belote &amp; Re</div>
+      <div class="barre-contexte" id="contexte">Gestion de tournois</div>
+    </div>
+    <div class="barre-droite">
+      <span class="etiquette" id="identite" hidden></span>
+      <button class="action discret" id="btn-quitter" hidden>Quitter</button>
+    </div>
+  </header>
+
+  <div class="voile" id="voile"></div>
+  <aside class="tiroir" id="tiroir" hidden>
+    <nav class="nav" id="nav"></nav>
+  </aside>
+
+  <main id="vue"></main>
+  <p class="pied">Team Belote &amp; Re — belote classique et coinchée</p>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
